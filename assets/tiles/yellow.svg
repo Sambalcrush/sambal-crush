@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="140" height="140" viewBox="0 0 140 140">
+    <defs>
+      <radialGradient id="g" cx="35%" cy="28%">
+        <stop offset="0%" stop-color="#fde68a"/>
+        <stop offset="58%" stop-color="#facc15"/>
+        <stop offset="100%" stop-color="#b45309"/>
+      </radialGradient>
+      <linearGradient id="shine" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#ffffffcc"/>
+        <stop offset="100%" stop-color="#ffffff00"/>
+      </linearGradient>
+      <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+        <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#00000055"/>
+      </filter>
+    </defs>
+    <g filter="url(#shadow)">
+      <rect x="10" y="10" rx="32" ry="32" width="120" height="120" fill="url(#g)"/>
+      <rect x="16" y="16" rx="28" ry="28" width="108" height="108" fill="none" stroke="#ffffffaa" stroke-width="4"/>
+      <path d="M28 28 C60 8,100 16,110 40 C88 34,58 40,34 56 C24 48,22 36,28 28Z" fill="url(#shine)"/>
+      <path d="M52 50 L88 50 L82 96 L58 96 Z" fill="#fff2" stroke="#fff8" stroke-width="3"/>
+    </g></svg>
