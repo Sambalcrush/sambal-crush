@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sambal Crush V10</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="header">
+      <div class="brand">
+        <div class="logo">SC</div>
+        <div>
+          <h1>Sambal Crush V10</h1>
+          <p>Gesplitste engine, betere power-ups, level data en een bonusdier dat soms een leven of muntjes geeft.</p>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><span>Score</span><strong id="score">0</strong></div>
+        <div class="stat"><span>Level</span><strong id="level">1</strong></div>
+        <div class="stat"><span>Moves</span><strong id="moves">20</strong></div>
+        <div class="stat"><span>Doel</span><strong id="goal">1200</strong></div>
+        <div class="stat"><span>Levens</span><strong id="lives">5</strong></div>
+        <div class="stat"><span>Muntjes</span><strong id="coins">0</strong></div>
+        <div class="stat"><span>Sam Level</span><strong id="samLevel">1</strong></div>
+        <div class="stat"><span>Gems</span><strong id="gems">0</strong></div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="home-shell">
+        <div class="home-card">
+          <h2>Startscherm</h2>
+          <div class="home-grid">
+            <button id="playBtn">Play</button>
+            <button id="shopBtn">Shop</button>
+            <button id="dailyBtn">Daily Reward</button>
+            <button id="chestsBtn">Chests</button>
+            <button id="skipBtn">Skip level (10 gems)</button>
+            <button id="rewardAdBtn">Bekijk ad voor +1 leven</button>
+          </div>
+          <div class="home-note">Rewarded ads zijn nu demo-knoppen. Later koppel je hier echte advertenties aan.</div>
+        </div>
+      </section>
+      <section class="board-shell">
+        <canvas id="game" width="576" height="576"></canvas>
+        <div id="comboOverlay" class="combo-overlay"></div>
+        <div id="scorePopups" class="popup-layer"></div>
+        <div id="animalEvent" class="animal-event hidden">
+          <div class="animal-card">
+            <div class="animal-face" id="animalFace">🐹</div>
+            <div>
+              <strong id="animalTitle">Sambal Hamster!</strong>
+              <div id="animalText">Hier heb je een extra leven.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="sidebar">
+        <div class="panel">
+          <h3>Shop</h3>
+          <div class="shop-item">
+            <div><strong>Super boost</strong><small>80 muntjes</small></div>
+            <button id="buySuperBoost">Koop</button>
+          </div>
+          <div class="shop-item">
+            <div><strong>Gem bundle</strong><small>demo bundle</small></div>
+            <button id="buyDemoGems">+25 gems</button>
+          </div>
+          <div class="shop-item">
+            <div><strong>+5 moves</strong><small>30 muntjes</small></div>
+            <button id="buyMoves">Koop</button>
+          </div>
+          <div class="shop-item">
+            <div><strong>+1 leven</strong><small>50 muntjes</small></div>
+            <button id="buyLife">Koop</button>
+          </div>
+          <div class="shop-item">
+            <div><strong>Hammer boost</strong><small>40 muntjes</small></div>
+            <button id="buyHammer">Koop</button>
+          </div>
+          <div class="shop-note" id="hammerStatus">Hammers: 0</div>
+        </div>
+
+        <div class="panel">
+          <h3>Level map</h3>
+          <div id="levelMap" class="level-map"></div>
+          <div class="map-note">Groen = gehaald, goud = huidig level, slotje = locked.</div>
+        </div>
+
+        <div class="panel">
+          <h3>Levens timer</h3>
+          <p id="lifeTimerText">Volle levens beschikbaar.</p>
+          <p id="adHintText">Bij geen levens kun je straks een rewarded ad kijken.</p>
+        </div>
+
+        <div class="panel">
+          <h3>Daily reward</h3>
+          <p id="dailyRewardText">Nog niet geclaimd vandaag.</p>
+          <button id="claimDaily">Claim daily reward</button>
+        </div>
+
+        <div class="panel">
+          <h3>Chest</h3>
+          <p id="chestText">Geen chest actief.</p>
+          <button id="openChest">Open chest</button>
+          <button id="watchChestAd">Bekijk ad en open sneller</button>
+        </div>
+
+        <div class="panel">
+          <h3>Bonus / events</h3>
+          <p id="bonusText">Bonus level nog niet actief.</p>
+          <button id="openBonusGame">Open bonus minigame</button>
+        </div>
+
+        <div class="panel">
+          <h3>Offline sambal-fabriek</h3>
+          <p id="factoryText">Produceert langzaam muntjes terwijl je weg bent.</p>
+          <button id="collectFactory">Collect coins</button>
+        </div>
+
+        <div class="panel">
+          <h3>Boss level</h3>
+          <p id="chestText">Geen chest actief.</p>
+          <button id="openChest">Open chest</button>
+        </div>
+      </aside>
+    </main>
+
+    <div id="message" class="message"></div>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
