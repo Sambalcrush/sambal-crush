@@ -1,19 +1,10 @@
 
 import { loadSprites, drawBoard, spawnPopup, showCombo, spawnParticles, attachBoardContext } from './ui/effects.js';
-import { createBoard, swapTiles, findMatches, removeAndCollapse, makeTile } from './engine/board.js';
+import { createBoard, swapTiles, findMatches, removeAndCollapse } from './engine/board.js';
 import { resolveSpecialCreation } from './engine/powerups.js';
 import { goalForLevel, movesForLevel, isBossLevel } from './systems/levels.js';
-import { loadState, saveState, refreshLives, spendLife, buyItem, nextLifeRemaining } from './systems/lives.js';
+import { loadState, saveState, refreshLives, spendLife } from './systems/lives.js';
 import { addCoins, addGems } from './systems/economy.js';
-import { claimDaily, canClaimDaily } from './systems/rewards.js';
-import { maybeStartChest, chestStatus, openChest, speedUpChestByAd } from './systems/chests.js';
-import { chargeSam, maybeLevelSam, samPowerCoverage } from './systems/sam.js';
-import { applyDevMode } from './systems/adminTools.js';
-import { buildLevelMap } from './ui/levelmap.js';
-import { rewardAd } from './systems/ads.js';
-import { collectFactory } from './systems/factory.js';
-import { canOpenBonusLevel, playBonusMiniGame } from './systems/bonus.js';
-import { saveHighScore } from './systems/leaderboard.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
@@ -21,128 +12,130 @@ const ctx = canvas.getContext('2d');
 attachBoardContext({ canvas, popupLayer: $('scorePopups'), comboOverlay: $('comboOverlay') });
 
 let sprites = {};
-let game = {
-  grid: [],
-  selected: null,
-  score: 0,
-  level: 1,
-  moves: 20,
-  goal: 1200,
-  state: applyDevMode(loadState(), new URLSearchParams(location.search).get('dev') === 'true'),
-  inputLocked: false,
-  hammerMode: false
-};
+let game = { grid: [], selected: null, score: 0, level: 1, moves: 20, goal: 1200, state: loadState(), inputLocked: false };
 
-function setMessage(msg){ $('message').textContent = msg; }
-function persist(){ game.state.level = game.level; saveState(game.state); }
+const mapPositions = [
+  {x:150,y:120},{x:330,y:95},{x:520,y:115},{x:700,y:165},{x:905,y:150},
+  {x:1020,y:305},{x:860,y:365},{x:640,y:390},{x:410,y:405},{x:205,y:520},
+  {x:170,y:690},{x:330,y:820},{x:545,y:840},{x:770,y:820},{x:980,y:760},
+  {x:1030,y:940},{x:870,y:1120},{x:650,y:1145},{x:450,y:1210},{x:245,y:1320},
+  {x:220,y:1470},{x:430,y:1490},{x:665,y:1480},{x:880,y:1430},{x:1030,y:1320},
+];
 
-function syncLevelState() {
-  game.goal = goalForLevel(game.level);
-  game.moves = movesForLevel(game.level);
+function toast(msg){
+  const el = $('message');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => el.classList.remove('show'), 1800);
 }
 
-function updatePanels() {
-  $('dailyRewardText').textContent = canClaimDaily(game.state) ? 'Nog niet geclaimd vandaag.' : 'Daily reward al geclaimd.';
-  $('claimDaily').disabled = !canClaimDaily(game.state);
-  const chest = chestStatus(game.state);
-  $('chestText').textContent = chest.text;
-  $('openChest').disabled = !chest.available;
-  $('bonusText').textContent = canOpenBonusLevel(game.level - 1) ? 'Bonus minigame beschikbaar!' : 'Bonus level nog niet actief.';
+function setActiveScreen(id){
+  for (const s of document.querySelectorAll('.screen')) s.classList.remove('active');
+  $(id).classList.add('active');
 }
 
-function updateUI() {
-  game.state = refreshLives(loadState());
-  game.state.level = game.level;
-  saveState(game.state);
+function syncHomeStats(){
+  const s = refreshLives(loadState());
+  saveState(s);
+  $('homeLevel').textContent = s.level || 1;
+  $('homeCoins').textContent = s.coins || 0;
+  $('homeGems').textContent = s.gems || 0;
+  $('homeLives').textContent = s.lives || 5;
+}
 
+function updateIngameUI(){
   $('score').textContent = game.score;
   $('level').textContent = game.level;
   $('moves').textContent = game.moves;
   $('goal').textContent = game.goal;
-  $('coins').textContent = game.state.coins;
-  $('gems').textContent = game.state.gems || 0;
-  $('lives').textContent = game.state.lives;
-  $('samLevel').textContent = game.state.samLevel;
-  $('hammerStatus').textContent = `Hammers: ${game.state.hammers}${game.hammerMode ? ' (tik op een tegel)' : ''}`;
-  $('lifeTimerText').textContent = game.state.lives >= 5 ? 'Volle levens beschikbaar.' : `Volgend leven over ${nextLifeRemaining(game.state)}.`;
-  $('factoryText').textContent = 'Produceert langzaam muntjes terwijl je offline bent.';
-  $('adHintText').textContent = 'Rewarded ads zijn demo-knoppen tot echte advertentie-koppeling.';
-
-  updatePanels();
-  buildLevelMap($('levelMap'), game.level, game.state.maxUnlocked, loadLevel);
 }
 
-function loadLevel(level) {
+function buildMap(){
+  const nodesWrap = $('mapNodes');
+  nodesWrap.innerHTML = '';
+  const s = refreshLives(loadState());
+  const currentLevel = s.level || 1;
+  const maxUnlocked = s.maxUnlocked || 1;
+
+  mapPositions.forEach((pos, idx) => {
+    const level = idx + 1;
+    const btn = document.createElement('button');
+    btn.className = 'map-node';
+    btn.style.left = `${pos.x}px`;
+    btn.style.top = `${pos.y}px`;
+
+    if (level % 25 === 0) btn.classList.add('bonus');
+    else if (level % 10 === 0) btn.classList.add('boss');
+
+    if (level < currentLevel) btn.classList.add('done');
+    else if (level === currentLevel) btn.classList.add('current');
+    else if (level > maxUnlocked) btn.classList.add('locked');
+
+    if (level > maxUnlocked) {
+      btn.textContent = '🔒';
+      btn.disabled = true;
+    } else {
+      btn.textContent = level % 25 === 0 ? '🎁' : level % 10 === 0 ? '👑' : level;
+      btn.addEventListener('click', () => startLevel(level));
+    }
+    nodesWrap.appendChild(btn);
+  });
+
+  const currentPos = mapPositions[Math.min(currentLevel - 1, mapPositions.length - 1)];
+  if (currentPos) $('mapScroll').scrollTo({ top: Math.max(0, currentPos.y - 220), behavior: 'smooth' });
+}
+
+function startLevel(level){
   game.level = level;
-  syncLevelState();
   game.score = 0;
   game.selected = null;
+  game.goal = goalForLevel(level);
+  game.moves = movesForLevel(level);
   game.grid = createBoard();
-  updateUI();
-  setMessage(`Level ${level} geladen`);
+  updateIngameUI();
+  setActiveScreen('gameScreen');
+  toast(`Level ${level} gestart`);
 }
 
-function maybeAnimalBonus() {
-  const roll = Math.random();
-  if (roll > 0.22) return;
-  const bonuses = [
-    { face:'🐹', title:'Sambal Hamster!', text:'Hier heb je een extra leven.', apply:s => s.lives = Math.min(5, s.lives + 1) },
-    { face:'🐱', title:'Lucky Cat!', text:'+40 muntjes voor testen.', apply:s => s.coins += 40 },
-    { face:'🐸', title:'Power Frog!', text:'Je krijgt 1 hammer boost.', apply:s => s.hammers += 1 },
-  ];
-  const pick = bonuses[Math.floor(Math.random()*bonuses.length)];
-  pick.apply(game.state);
-  saveState(game.state);
-  $('animalFace').textContent = pick.face;
-  $('animalTitle').textContent = pick.title;
-  $('animalText').textContent = pick.text;
-  $('animalEvent').classList.remove('hidden');
-  setTimeout(() => $('animalEvent').classList.add('hidden'), 2800);
+function showPanel(title, body){
+  $('panelTitle').textContent = title;
+  $('panelBody').innerHTML = body;
+  $('panelModal').classList.remove('hidden');
 }
 
-function tone(freq, dur, type='sine', gain=0.03, when=0) {
+function showWinModal(text){
+  $('winTitle').textContent = `Level ${game.level} gehaald!`;
+  $('winText').textContent = text;
+  $('winModal').classList.remove('hidden');
+}
+function closeWinModal(){ $('winModal').classList.add('hidden'); }
+function closePanel(){ $('panelModal').classList.add('hidden'); }
+
+function playTone(freq, dur, type='sine', gain=0.03, when=0) {
   if (!window.AudioContext && !window.webkitAudioContext) return;
-  if (!tone.ctx) tone.ctx = new (window.AudioContext || window.webkitAudioContext)();
-  const ac = tone.ctx, o = ac.createOscillator(), g = ac.createGain(), now = ac.currentTime + when;
+  if (!playTone.ctx) playTone.ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const ac = playTone.ctx, o = ac.createOscillator(), g = ac.createGain();
   o.type = type; o.frequency.value = freq; g.gain.value = gain; o.connect(g); g.connect(ac.destination);
-  o.start(now); o.stop(now + dur); g.gain.setValueAtTime(gain, now); g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+  const now = ac.currentTime + when;
+  o.start(now); o.stop(now + dur);
+  g.gain.setValueAtTime(gain, now);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
 }
 const sounds = {
-  match(){ tone(620,.08,'triangle',.03); tone(780,.08,'triangle',.024,.06); },
-  combo(){ tone(520,.08,'square',.03); tone(720,.08,'square',.03,.05); tone(960,.1,'square',.02,.11); },
-  win(){ tone(520,.08,'triangle',.03); tone(660,.08,'triangle',.03,.08); tone(820,.12,'triangle',.03,.16); },
-  bomb(){ tone(160,.08,'sawtooth',.04); tone(90,.16,'sawtooth',.03,.04); }
+  match(){ playTone(620,.08,'triangle',.03); playTone(780,.08,'triangle',.024,.06); },
+  combo(){ playTone(520,.08,'square',.03); playTone(720,.08,'square',.03,.05); playTone(960,.1,'square',.02,.11); },
+  win(){ playTone(520,.08,'triangle',.03); playTone(660,.08,'triangle',.03,.08); playTone(820,.12,'triangle',.03,.16); },
+  bomb(){ playTone(160,.08,'sawtooth',.04); playTone(90,.16,'sawtooth',.03,.04); }
 };
-
-function refillGrid(grid) {
-  for (let x = 0; x < 8; x++) {
-    const stack = [];
-    for (let y = 7; y >= 0; y--) if (grid[y][x]) stack.push(grid[y][x]);
-    for (let y = 7; y >= 0; y--) grid[y][x] = stack.length ? stack.shift() : makeTile();
-  }
-  return grid;
-}
-
-function triggerSamPower() {
-  const coverage = samPowerCoverage(game.state);
-  let burned = 0;
-  for (let y=0;y<8;y++) for (let x=0;x<8;x++) if (Math.random() < coverage) { game.grid[y][x] = null; burned++; }
-  refillGrid(game.grid);
-  for (let i=0;i<12;i++) spawnParticles(Math.random()*canvas.clientWidth, Math.random()*canvas.clientHeight, ['#fb923c','#ef4444','#facc15','#ffffff']);
-  sounds.bomb(); sounds.combo();
-  setMessage(`Sam gebruikt vuurscheet! ${burned} tiles verbrand.`);
-}
 
 async function resolveBoardLoop() {
   game.inputLocked = true;
   while (true) {
     const matches = findMatches(game.grid);
     if (!matches.length) break;
-
-    game.state = chargeSam(game.state, 10 + (matches.length >= 5 ? 10 : 0));
     const creation = resolveSpecialCreation(matches, game.grid);
     const result = removeAndCollapse(game.grid, matches, creation);
-
     game.score += result.points;
     spawnPopup(`+${result.points}`, canvas.clientWidth / 2, 120, '#fff');
     if (result.comboText) showCombo(result.comboText);
@@ -151,78 +144,50 @@ async function resolveBoardLoop() {
       for (const p of result.particles) spawnParticles(p.x, p.y, ['#f97316','#facc15','#ef4444','#ffffff']);
     } else if (result.comboText === 'MEGA SAMBAL!' || result.comboText === 'Sambal Storm!') sounds.combo();
     else sounds.match();
-
-    if ((game.state.samMeter || 0) >= 100) {
-      game.state.samMeter = 0;
-      triggerSamPower();
-    }
-    updateUI();
+    updateIngameUI();
     await new Promise(r => setTimeout(r, 320));
   }
   game.inputLocked = false;
   checkRound();
 }
 
-function checkRound() {
-  if (game.score >= game.goal) {
-    const reward = 25 + game.level * 6;
-    game.state = addCoins(game.state, reward);
-    if (isBossLevel(game.level)) game.state = addGems(game.state, 3);
-    game.state.samWins = (game.state.samWins || 0) + 1;
-    const leveled = maybeLevelSam(game.state);
-    game.level += 1;
-    game.state.level = game.level;
-    game.state.maxUnlocked = Math.max(game.state.maxUnlocked, game.level);
-    game.state = maybeStartChest(game.state);
-    saveState(game.state);
-    saveHighScore(game.level - 1, game.score);
-    sounds.win();
-    maybeAnimalBonus();
-    syncLevelState();
-    game.score = 0;
-    game.grid = createBoard();
-    updateUI();
-    setMessage(`Level gehaald! +${reward} muntjes${isBossLevel(game.level-1) ? ' +3 gems (boss)' : ''}${leveled ? ' • Sam level up!' : ''}`);
-    return;
-  }
+function winLevel(){
+  let s = refreshLives(loadState());
+  const reward = 25 + game.level * 6;
+  s = addCoins(s, reward);
+  if (isBossLevel(game.level)) s = addGems(s, 3);
+  s.level = Math.max((s.level || 1), game.level + 1);
+  s.maxUnlocked = Math.max((s.maxUnlocked || 1), game.level + 1);
+  saveState(s);
+  syncHomeStats();
+  buildMap();
+  sounds.win();
+  const extra = isBossLevel(game.level) ? ' en +3 gems' : '';
+  showWinModal(`Je kreeg +${reward} muntjes${extra}. Level ${game.level + 1} is nu vrijgespeeld.`);
+}
 
-  if (game.moves <= 0) {
-    game.state = spendLife(game.state);
-    saveState(game.state);
-    if (game.state.lives <= 0) setMessage('Geen levens meer. Wacht op regeneratie.');
-    else {
-      setMessage('Moves op. Probeer opnieuw.');
-      game.score = 0;
-      syncLevelState();
-      game.grid = createBoard();
-    }
-    updateUI();
-  }
+function loseLevel(){
+  let s = refreshLives(loadState());
+  s = spendLife(s);
+  saveState(s);
+  syncHomeStats();
+  if (s.lives <= 0) toast('Geen levens meer. Wacht op regeneratie.');
+  else toast('Moves op. Probeer opnieuw.');
+  setActiveScreen('mapScreen');
+}
+
+function checkRound(){
+  if (game.score >= game.goal) return winLevel();
+  if (game.moves <= 0) return loseLevel();
 }
 
 function handleTile(x, y) {
-  game.state = refreshLives(loadState());
-  if (game.state.lives <= 0 || game.inputLocked) return;
-
-  if (game.hammerMode && game.state.hammers > 0) {
-    game.state.hammers -= 1;
-    saveState(game.state);
-    game.grid[y][x] = null;
-    game.hammerMode = false;
-    spawnParticles((x+.5)*(canvas.clientWidth/8), (y+.5)*(canvas.clientHeight/8), ['#60a5fa','#ffffff','#facc15']);
-    sounds.bomb();
-    refillGrid(game.grid);
-    resolveBoardLoop();
-    updateUI();
-    return;
-  }
-
-  if (!game.selected) { game.selected = {x,y}; return; }
-  if (game.selected.x === x && game.selected.y === y) { game.selected = null; return; }
-
+  const s = refreshLives(loadState());
+  if (s.lives <= 0 || game.inputLocked) return;
+  if (!game.selected) return void (game.selected = {x,y});
+  if (game.selected.x === x && game.selected.y === y) return void (game.selected = null);
   const adjacent = Math.abs(game.selected.x - x) + Math.abs(game.selected.y - y) === 1;
-  if (!adjacent) { game.selected = {x,y}; return; }
-
+  if (!adjacent) return void (game.selected = {x,y});
   swapTiles(game.grid, game.selected, {x,y});
   const matches = findMatches(game.grid);
   if (!matches.length) {
@@ -232,11 +197,12 @@ function handleTile(x, y) {
   }
   game.moves -= 1;
   game.selected = null;
-  updateUI();
+  updateIngameUI();
   resolveBoardLoop();
 }
 
 canvas.addEventListener('click', (e) => {
+  if (!$('gameScreen').classList.contains('active')) return;
   const rect = canvas.getBoundingClientRect();
   const x = Math.floor(((e.clientX - rect.left) * (canvas.width / rect.width)) / 72);
   const y = Math.floor(((e.clientY - rect.top) * (canvas.height / rect.height)) / 72);
@@ -245,14 +211,16 @@ canvas.addEventListener('click', (e) => {
 
 let touchStart = null;
 canvas.addEventListener('touchstart', (e) => {
+  if (!$('gameScreen').classList.contains('active')) return;
   const rect = canvas.getBoundingClientRect(), t = e.touches[0];
   touchStart = {
     x: Math.floor(((t.clientX - rect.left) * (canvas.width / rect.width)) / 72),
     y: Math.floor(((t.clientY - rect.top) * (canvas.height / rect.height)) / 72)
   };
 }, { passive:true });
+
 canvas.addEventListener('touchend', (e) => {
-  if (!touchStart) return;
+  if (!touchStart || !$('gameScreen').classList.contains('active')) return;
   const rect = canvas.getBoundingClientRect(), t = e.changedTouches[0];
   const end = {
     x: Math.floor(((t.clientX - rect.left) * (canvas.width / rect.width)) / 72),
@@ -263,102 +231,27 @@ canvas.addEventListener('touchend', (e) => {
   touchStart = null;
 }, { passive:true });
 
-$('playBtn').addEventListener('click', () => setMessage('Play!'));
-$('shopBtn').addEventListener('click', () => setMessage('Shop staat rechts klaar.'));
-$('dailyBtn').addEventListener('click', () => $('claimDaily').scrollIntoView({behavior:'smooth'}));
-$('chestsBtn').addEventListener('click', () => $('openChest').scrollIntoView({behavior:'smooth'}));
-$('skipBtn').addEventListener('click', () => {
-  if ((game.state.gems || 0) < 10) return setMessage('Niet genoeg gems om level te skippen.');
-  game.state.gems -= 10;
-  game.level += 1;
-  game.state.level = game.level;
-  game.state.maxUnlocked = Math.max(game.state.maxUnlocked, game.level);
-  syncLevelState();
-  game.score = 0;
-  game.grid = createBoard();
-  saveState(game.state);
-  updateUI();
-  setMessage('Level overgeslagen met 10 gems.');
-});
-$('rewardAdBtn').addEventListener('click', () => {
-  const res = rewardAd(loadState(), 'life');
-  game.state = res.state;
-  saveState(game.state);
-  updateUI();
-  setMessage(res.reward);
-});
-$('watchChestAd').addEventListener('click', () => {
-  const res = speedUpChestByAd(loadState());
-  game.state = res.state;
-  saveState(game.state);
-  updateUI();
-  setMessage(res.message);
-});
+$('playBtn').addEventListener('click', () => { syncHomeStats(); buildMap(); setActiveScreen('mapScreen'); });
+$('backHomeBtn').addEventListener('click', () => { syncHomeStats(); setActiveScreen('homeScreen'); });
+$('leaveLevelBtn').addEventListener('click', () => { buildMap(); setActiveScreen('mapScreen'); });
+$('nextLevelBtn').addEventListener('click', () => { closeWinModal(); startLevel(game.level + 1); });
+$('backToMapBtn').addEventListener('click', () => { closeWinModal(); buildMap(); setActiveScreen('mapScreen'); });
+$('closePanelBtn').addEventListener('click', closePanel);
 
-$('buyMoves').addEventListener('click', () => {
-  const res = buyItem(loadState(), 'moves');
-  if (!res.ok) return setMessage(res.message);
-  saveState(res.state); game.moves += 5; game.state = res.state; updateUI(); setMessage('+5 moves gekocht');
-});
-$('buyLife').addEventListener('click', () => {
-  const res = buyItem(loadState(), 'life');
-  if (!res.ok) return setMessage(res.message);
-  saveState(res.state); game.state = res.state; updateUI(); setMessage('+1 leven gekocht');
-});
-$('buyHammer').addEventListener('click', () => {
-  const res = buyItem(loadState(), 'hammer');
-  if (!res.ok) return setMessage(res.message);
-  saveState(res.state); game.state = res.state; game.hammerMode = true; updateUI(); setMessage('Hammer gekocht. Tik op een tegel.');
-});
-$('buySuperBoost').addEventListener('click', () => {
-  const res = buyItem(loadState(), 'super');
-  if (!res.ok) return setMessage(res.message);
-  saveState(res.state); game.state = res.state; game.state.samMeter = 100; saveState(game.state); updateUI(); setMessage('Super boost gekocht: Sam is direct klaar.');
-});
-$('buyDemoGems').addEventListener('click', () => {
-  const res = buyItem(loadState(), 'gems25');
-  if (!res.ok) return setMessage(res.message);
-  saveState(res.state); game.state = res.state; updateUI(); setMessage('+25 demo gems toegevoegd');
-});
-$('claimDaily').addEventListener('click', () => {
-  const res = claimDaily(loadState());
-  if (!res.ok) return setMessage(res.message);
-  saveState(res.state); game.state = res.state; updateUI(); setMessage(`Daily reward: ${res.rewardText} (dag ${res.streak})`);
-});
-$('openChest').addEventListener('click', () => {
-  const res = openChest(loadState());
-  if (!res.ok) return setMessage(res.message);
-  saveState(res.state); game.state = res.state; updateUI(); setMessage(`Chest geopend: ${res.rewardText}`);
-});
-$('collectFactory').addEventListener('click', async () => {
-  const { collectFactory } = await import('./systems/factory.js');
-  const res = collectFactory(loadState());
-  saveState(res.state); game.state = res.state; updateUI();
-  setMessage(res.produced > 0 ? `Sambal-fabriek: +${res.produced} muntjes` : 'Nog niets geproduceerd.');
-});
-$('openBonusGame').addEventListener('click', async () => {
-  if (!canOpenBonusLevel(game.level - 1)) return setMessage('Bonus minigame nog niet beschikbaar.');
-  const res = playBonusMiniGame(loadState());
-  saveState(res.state); game.state = res.state; updateUI(); setMessage(res.text);
-});
+$('shopBtn').addEventListener('click', () => showPanel('Shop', '<p>Shop flow komt hier. Voor nu focussen we op homescreen → roadmap → fullscreen level.</p>'));
+$('dailyBtn').addEventListener('click', () => showPanel('Daily reward', '<p>Daily reward flow komt hier. Dit scherm kunnen we straks mooi stylen.</p>'));
+$('chestsBtn').addEventListener('click', () => showPanel('Chests', '<p>Chest flow komt hier. We kunnen straks een echte chest-open animatie maken.</p>'));
 
-setInterval(() => {
-  game.state = refreshLives(loadState());
-  saveState(game.state);
-  updateUI();
-}, 1000);
+setInterval(syncHomeStats, 1000);
 
 loadSprites().then((loaded) => {
   sprites = loaded;
-  game.state = refreshLives(loadState());
-  saveState(game.state);
-  game.level = game.state.level;
-  syncLevelState();
+  syncHomeStats();
+  buildMap();
+  setActiveScreen('homeScreen');
   game.grid = createBoard();
-  updateUI();
-  setMessage('V13 klaar. Ads, gems, skip level, bonus minigame en economie zijn toegevoegd.');
   (function draw(){
-    drawBoard(ctx, game.grid, sprites, game.selected, game.hammerMode);
+    drawBoard(ctx, game.grid, sprites, game.selected, false);
     requestAnimationFrame(draw);
   })();
 });
